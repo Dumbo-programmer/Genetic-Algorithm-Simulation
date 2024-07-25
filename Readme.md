@@ -9,8 +9,12 @@
    - Inversion 
    - Random Set
  - Gene length and Size
+ - GeneType
+  - Amino Acid
+  - Nucleotide
+  - Binary
  - Variable Feature via GUI
- - Overall Report 
+ - Overall Report(Logfile)
  - GUI visualization 
  - Multiple Creatures
  - Dominating species 
@@ -20,3 +24,10 @@
 
 
 **Possible Upcoming Updates:** 
+- Custom Fitness Functions
+- Ecological Models
+- Visualization and Analysis
+- Interactive Features
+- Integration with Biological Databases
+- Educational Features
+- Collaborative Features
