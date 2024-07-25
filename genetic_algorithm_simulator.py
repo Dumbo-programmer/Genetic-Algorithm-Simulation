@@ -21,6 +21,25 @@ def crossover(parent1, parent2, gene_length):
     child2 = parent2[:crossover_point] + parent1[crossover_point:]
     return child1, child2
 
+def communalism(population1, population2, community_benefit, gene_length):
+    for i in range(len(population1)):
+        if random.random() < COMMUNITY_BENEFIT:
+            fitness1 = fitness(population1[i], TARGET)
+            fitness2 = fitness(random.choice(population2), TARGET)
+            # Benefit from communalism
+            population1[i] = mutation(population1[i], MUTATION_RATE, MUTATION_TYPE, gene_length)
+    return population1
+
+def mutualism(population1, population2, mutualism_rate, gene_length):
+    interactions = int(mutualism_rate * len(population1))
+    for _ in range(interactions):
+        individual1 = random.choice(population1)
+        individual2 = random.choice(population2)
+        if fitness(individual1, TARGET) < fitness(individual2, TARGET):
+            # Benefit from mutualism
+            population1.append(mutation(individual1, MUTATION_RATE, MUTATION_TYPE, gene_length))
+    return population1
+
 def mutation(individual, mutation_rate, mutation_type, gene_length):
     if random.random() < mutation_rate:
         if mutation_type == 'bit_flip':
@@ -48,38 +67,47 @@ def disaster(population, disaster_rate):
     population = random.sample(population, num_survivors)
     return population
 
-def genetic_algorithm(gui_callback, visual_callback, pop_size, gene_length, target, max_generations, mutation_rate, elite_size, predator_rate, disaster_rate, mutation_type):
-    population = initialize_population(pop_size, gene_length)
+def genetic_algorithm(gui_callback, visual_callback, pop_size, gene_length, target, max_generations, mutation_rate, elite_size, predator_rate, disaster_rate, mutation_type, num_species, mutualism_rate, community_benefit):
+    species_populations = initialize_population(pop_size, gene_length, num_species)
     best_fitness = 0
     best_individual = None
 
     for generation in range(max_generations):
-        fitness_scores = [fitness(individual, target) for individual in population]
-        best_index = fitness_scores.index(max(fitness_scores))
-        if fitness_scores[best_index] > best_fitness:
-            best_fitness = fitness_scores[best_index]
-            best_individual = population[best_index]
+        all_fitness_scores = []
+        for population in species_populations:
+            fitness_scores = [fitness(individual, target) for individual in population]
+            all_fitness_scores.extend(fitness_scores)
+            best_index = fitness_scores.index(max(fitness_scores))
+            if fitness_scores[best_index] > best_fitness:
+                best_fitness = fitness_scores[best_index]
+                best_individual = population[best_index]
 
         gui_callback(f"Generation {generation}, Best fitness: {best_fitness}, Individual: {best_individual}")
-        visual_callback(fitness_scores)
+        visual_callback(all_fitness_scores)
 
         if best_fitness == gene_length:
             break
 
-        elite = elitism(population, fitness_scores, elite_size)
-        population = selection(population, fitness_scores)
-        offspring = []
-        for _ in range(len(population) // 2):
-            parent1, parent2 = random.sample(population, 2)
-            child1, child2 = crossover(parent1, parent2, gene_length)
-            offspring.append(mutation(child1, mutation_rate, mutation_type, gene_length))
-            offspring.append(mutation(child2, mutation_rate, mutation_type, gene_length))
-        population = elite + offspring
+        for i in range(num_species):
+            species_populations[i] = elitism(species_populations[i], all_fitness_scores, elite_size)
+            species_populations[i] = selection(species_populations[i], all_fitness_scores)
+            offspring = []
+            for _ in range(len(species_populations[i]) // 2):
+                parent1, parent2 = random.sample(species_populations[i], 2)
+                child1, child2 = crossover(parent1, parent2, gene_length)
+                offspring.append(mutation(child1, mutation_rate, mutation_type, gene_length))
+                offspring.append(mutation(child2, mutation_rate, mutation_type, gene_length))
+            species_populations[i] = species_populations[i][:len(species_populations[i]) - ELITE_SIZE] + offspring
 
-        if random.random() < predator_rate:
-            population = predator(population, predator_rate)
-        if random.random() < disaster_rate:
-            population = disaster(population, disaster_rate)
+            if random.random() < predator_rate:
+                species_populations[i] = predator(species_populations[i], predator_rate)
+            if random.random() < disaster_rate:
+                species_populations[i] = disaster(species_populations[i], disaster_rate)
+
+            for j in range(num_species):
+                if i != j:
+                    species_populations[i] = mutualism(species_populations[i], species_populations[j], mutualism_rate, gene_length)
+                    species_populations[i] = communalism(species_populations[i], species_populations[j], community_benefit, gene_length)
 
     return best_individual, best_fitness
 
@@ -127,22 +155,25 @@ class GeneticAlgorithmGUI(tk.Tk):
         self.create_labeled_entry("Elite Size:", 5, "The number of top individuals preserved without mutation.")
         self.create_labeled_entry("Predator Rate:", 6, "The proportion of the population removed by the predator mechanism.")
         self.create_labeled_entry("Disaster Rate:", 7, "The proportion of the population removed by natural disasters.")
-        
+        self.create_labeled_entry("Number of Species:", 8, "The number of different species in the simulation.")
+        self.create_labeled_entry("Mutualism Rate:", 9, "The interaction rate between species where they benefit from cooperation.")
+        self.create_labeled_entry("Community Benefit:", 10, "The fitness boost from communal interactions.")
+
         # Mutation type dropdown
-        tk.Label(self, text="Mutation Type:").grid(row=8, column=0, pady=5, sticky="e")
+        tk.Label(self, text="Mutation Type:").grid(row=11, column=0, pady=5, sticky="e")
         self.mutation_type_var = tk.StringVar()
         self.mutation_type_var.set("bit_flip")
         self.mutation_type_menu = ttk.Combobox(self, textvariable=self.mutation_type_var, values=["bit_flip", "inversion", "random_set"])
-        self.mutation_type_menu.grid(row=8, column=1, pady=5, sticky="w")
+        self.mutation_type_menu.grid(row=11, column=1, pady=5, sticky="w")
         self.create_tooltip(self.mutation_type_menu, "The type of mutation applied to individuals.")
 
         # Start button
         self.start_button = ttk.Button(self, text="Start Simulation", command=self.start_simulation)
-        self.start_button.grid(row=9, column=0, columnspan=2, pady=20)
+        self.start_button.grid(row=12, column=0, columnspan=2, pady=20)
         
         # Output text box
         self.output_text = tk.Text(self, wrap="word", height=20, width=80)
-        self.output_text.grid(row=10, column=0, columnspan=2, pady=20)
+        self.output_text.grid(row=13, column=0, columnspan=2, pady=20)
 
     def create_labeled_entry(self, label_text, row, tooltip_text):
         tk.Label(self, text=label_text).grid(row=row, column=0, pady=5, sticky="e")
@@ -181,9 +212,12 @@ class GeneticAlgorithmGUI(tk.Tk):
             elite_size = int(self.elite_size.get())
             predator_rate = float(self.predator_rate.get())
             disaster_rate = float(self.disaster_rate.get())
+            num_species = int(self.num_species.get())
+            mutualism_rate = float(self.mutualism_rate.get())
+            community_benefit = float(self.community_benefit.get())
             mutation_type = self.mutation_type_var.get()
 
-            if pop_size <= 0 or gene_length <= 0 or max_generations <= 0 or mutation_rate < 0 or elite_size < 0 or predator_rate < 0 or disaster_rate < 0:
+            if pop_size <= 0 or gene_length <= 0 or max_generations <= 0 or mutation_rate < 0 or elite_size < 0 or predator_rate < 0 or disaster_rate < 0 or num_species <= 0 or mutualism_rate < 0 or community_benefit < 0:
                 raise ValueError("All values must be positive.")
             if not all(bit in "01" for bit in target):
                 raise ValueError("Target must be a binary string.")
@@ -197,7 +231,6 @@ class GeneticAlgorithmGUI(tk.Tk):
         self.start_button.config(state=tk.DISABLED)
         self.visualizer.start()
         self.update_output("Starting simulation...")
-
         def run_genetic_algorithm():
             best_individual, best_fitness = genetic_algorithm(
                 self.update_output,
@@ -210,7 +243,10 @@ class GeneticAlgorithmGUI(tk.Tk):
                 elite_size,
                 predator_rate,
                 disaster_rate,
-                mutation_type
+                mutation_type,
+                num_species,
+                mutualism_rate,
+                community_benefit
             )
             self.update_output(f"\nFinal best individual: {best_individual}")
             self.update_output(f"Final best fitness: {best_fitness}")
