@@ -2,6 +2,9 @@ import random
 import tkinter as tk
 from tkinter import ttk
 import pygame
+import logging
+
+logging.basicConfig(filename='genetic_algorithm.log', level=logging.INFO)
 
 # Genetic Algorithm Functions
 def initialize_population(pop_size, gene_length):
@@ -9,6 +12,9 @@ def initialize_population(pop_size, gene_length):
 
 def fitness(individual, target):
     return sum(1 for i in range(len(individual)) if individual[i] == target[i])
+
+def adaptive_mutation_rate(generation, max_generations):
+    return max(0.01, 0.1 * (1 - generation / max_generations))
 
 def selection(population, fitness_scores):
     total_fitness = sum(fitness_scores)
@@ -21,15 +27,15 @@ def crossover(parent1, parent2, gene_length):
     child2 = parent2[:crossover_point] + parent1[crossover_point:]
     return child1, child2
 
+
 def communalism(population1, population2, community_benefit, gene_length):
     for i in range(len(population1)):
-        if random.random() < COMMUNITY_BENEFIT:
+        if random.random() < community_benefit:  # Use community_benefit
             fitness1 = fitness(population1[i], TARGET)
             fitness2 = fitness(random.choice(population2), TARGET)
             # Benefit from communalism
             population1[i] = mutation(population1[i], MUTATION_RATE, MUTATION_TYPE, gene_length)
     return population1
-
 def mutualism(population1, population2, mutualism_rate, gene_length):
     interactions = int(mutualism_rate * len(population1))
     for _ in range(interactions):
@@ -39,7 +45,6 @@ def mutualism(population1, population2, mutualism_rate, gene_length):
             # Benefit from mutualism
             population1.append(mutation(individual1, MUTATION_RATE, MUTATION_TYPE, gene_length))
     return population1
-
 def mutation(individual, mutation_rate, mutation_type, gene_length):
     if random.random() < mutation_rate:
         if mutation_type == 'bit_flip':
@@ -57,6 +62,22 @@ def elitism(population, fitness_scores, elite_size):
     elite = [population[i] for i in elite_indices]
     return elite
 
+def adjust_population(population, max_size, min_size):
+    if len(population) > max_size:
+        population = random.sample(population, max_size)
+    elif len(population) < min_size:
+        additional_individuals = initialize_population(min_size - len(population), len(population[0]))
+        population += additional_individuals
+    return population
+
+def tournament_selection(population, fitness_scores, tournament_size=5):
+    selected = []
+    for _ in range(len(population)):
+        tournament = random.sample(list(zip(population, fitness_scores)), tournament_size)
+        winner = max(tournament, key=lambda x: x[1])[0]
+        selected.append(winner)
+    return selected
+
 def predator(population, predator_rate):
     num_predators = int(predator_rate * len(population))
     population = random.sample(population, len(population) - num_predators)
@@ -67,62 +88,68 @@ def disaster(population, disaster_rate):
     population = random.sample(population, num_survivors)
     return population
 
-def genetic_algorithm(gui_callback, visual_callback, pop_size, gene_length, target, max_generations, mutation_rate, elite_size, predator_rate, disaster_rate, mutation_type, num_species, mutualism_rate, community_benefit):
-    species_populations = initialize_population(pop_size, gene_length, num_species)
+def genetic_algorithm(gui_callback, visual_callback, pop_size, gene_length, target, max_generations, mutation_rate, elite_size, predator_rate, disaster_rate, mutation_type, custom_fitness=None, num_species=1, mutualism_rate=0.0, community_benefit=0.0):
+    population = initialize_population(pop_size, gene_length)
     best_fitness = 0
     best_individual = None
 
     for generation in range(max_generations):
-        all_fitness_scores = []
-        for population in species_populations:
+        current_mutation_rate = adaptive_mutation_rate(generation, max_generations)
+        if custom_fitness:
+            fitness_scores = [custom_fitness(individual) for individual in population]
+        else:
             fitness_scores = [fitness(individual, target) for individual in population]
-            all_fitness_scores.extend(fitness_scores)
-            best_index = fitness_scores.index(max(fitness_scores))
-            if fitness_scores[best_index] > best_fitness:
-                best_fitness = fitness_scores[best_index]
-                best_individual = population[best_index]
+        
+        best_index = fitness_scores.index(max(fitness_scores))
+        if fitness_scores[best_index] > best_fitness:
+            best_fitness = fitness_scores[best_index]
+            best_individual = population[best_index]
 
-        gui_callback(f"Generation {generation}, Best fitness: {best_fitness}, Individual: {best_individual}")
-        visual_callback(all_fitness_scores)
+        log_message = f"Generation {generation}, Best fitness: {best_fitness}, Individual: {best_individual}"
+        logging.info(log_message)
+        gui_callback(log_message)
+        visual_callback(fitness_scores)
 
         if best_fitness == gene_length:
             break
 
-        for i in range(num_species):
-            species_populations[i] = elitism(species_populations[i], all_fitness_scores, elite_size)
-            species_populations[i] = selection(species_populations[i], all_fitness_scores)
-            offspring = []
-            for _ in range(len(species_populations[i]) // 2):
-                parent1, parent2 = random.sample(species_populations[i], 2)
-                child1, child2 = crossover(parent1, parent2, gene_length)
-                offspring.append(mutation(child1, mutation_rate, mutation_type, gene_length))
-                offspring.append(mutation(child2, mutation_rate, mutation_type, gene_length))
-            species_populations[i] = species_populations[i][:len(species_populations[i]) - ELITE_SIZE] + offspring
+        elite = elitism(population, fitness_scores, elite_size)
+        population = tournament_selection(population, fitness_scores)
+        offspring = []
+        for _ in range(len(population) // 2):
+            parent1, parent2 = random.sample(population, 2)
+            child1, child2 = crossover(parent1, parent2, gene_length)
+            offspring.append(mutation(child1, current_mutation_rate, mutation_type, gene_length))
+            offspring.append(mutation(child2, current_mutation_rate, mutation_type, gene_length))
+        population = elite + offspring
 
-            if random.random() < predator_rate:
-                species_populations[i] = predator(species_populations[i], predator_rate)
-            if random.random() < disaster_rate:
-                species_populations[i] = disaster(species_populations[i], disaster_rate)
+        if num_species > 1:
+            # Apply communalism and mutualism if multiple species are involved
+            population = communalism(population, population, community_benefit, target, current_mutation_rate, mutation_type, gene_length)
+            population = mutualism(population, population, mutualism_rate, gene_length, target, current_mutation_rate, mutation_type)
 
-            for j in range(num_species):
-                if i != j:
-                    species_populations[i] = mutualism(species_populations[i], species_populations[j], mutualism_rate, gene_length)
-                    species_populations[i] = communalism(species_populations[i], species_populations[j], community_benefit, gene_length)
+        if random.random() < predator_rate:
+            population = predator(population, predator_rate)
+        if random.random() < disaster_rate:
+            population = disaster(population, disaster_rate)
+
+        population = adjust_population(population, max_size=pop_size, min_size=pop_size//2)
 
     return best_individual, best_fitness
 
 # Pygame Visualization
-class PygameVisualizer:
+class InteractivePygameVisualizer:
     def __init__(self, width=800, height=600):
         self.width = width
         self.height = height
         self.screen = None
+        self.running = True
 
     def start(self):
         pygame.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("Genetic Algorithm Visualizer")
-    
+        pygame.display.set_caption("Interactive Genetic Algorithm Visualizer")
+
     def stop(self):
         pygame.quit()
 
@@ -135,13 +162,18 @@ class PygameVisualizer:
             pygame.draw.rect(self.screen, (0, 255, 0), (i * bar_width, self.height - bar_height, bar_width, bar_height))
         pygame.display.flip()
 
+        # Event handling for interactivity
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+
 # GUI
 class GeneticAlgorithmGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Genetic Algorithm Simulator")
         self.geometry("800x600")
-        self.visualizer = PygameVisualizer()
+        self.visualizer = InteractivePygameVisualizer()  # Use InteractivePygameVisualizer instead
 
         self.create_widgets()
 
@@ -170,7 +202,7 @@ class GeneticAlgorithmGUI(tk.Tk):
         # Start button
         self.start_button = ttk.Button(self, text="Start Simulation", command=self.start_simulation)
         self.start_button.grid(row=12, column=0, columnspan=2, pady=20)
-        
+
         # Output text box
         self.output_text = tk.Text(self, wrap="word", height=20, width=80)
         self.output_text.grid(row=13, column=0, columnspan=2, pady=20)
@@ -179,7 +211,7 @@ class GeneticAlgorithmGUI(tk.Tk):
         tk.Label(self, text=label_text).grid(row=row, column=0, pady=5, sticky="e")
         entry = ttk.Entry(self)
         entry.grid(row=row, column=1, pady=5, sticky="w")
-        setattr(self, label_text.replace(" ", "_").lower()[:-1], entry)
+        setattr(self, label_text.replace(" ", "_").lower()[:-1], entry)  # Store the entry widget
         self.create_tooltip(entry, tooltip_text)
 
     def create_tooltip(self, widget, text):
@@ -212,7 +244,7 @@ class GeneticAlgorithmGUI(tk.Tk):
             elite_size = int(self.elite_size.get())
             predator_rate = float(self.predator_rate.get())
             disaster_rate = float(self.disaster_rate.get())
-            num_species = int(self.num_species.get())
+            num_species = int(self.num_species.get())  # Ensure num_species exists
             mutualism_rate = float(self.mutualism_rate.get())
             community_benefit = float(self.community_benefit.get())
             mutation_type = self.mutation_type_var.get()
@@ -223,38 +255,40 @@ class GeneticAlgorithmGUI(tk.Tk):
                 raise ValueError("Target must be a binary string.")
             if len(target) != gene_length:
                 raise ValueError("Target length must match gene length.")
-            
+
         except ValueError as e:
-            self.update_output(f"Invalid input: {e}")
-            return
+         self.update_output(f"Invalid input: {e}")
+         return
 
         self.start_button.config(state=tk.DISABLED)
         self.visualizer.start()
         self.update_output("Starting simulation...")
-        def run_genetic_algorithm():
-            best_individual, best_fitness = genetic_algorithm(
-                self.update_output,
-                self.visualizer.draw,
-                pop_size,
-                gene_length,
-                target,
-                max_generations,
-                mutation_rate,
-                elite_size,
-                predator_rate,
-                disaster_rate,
-                mutation_type,
-                num_species,
-                mutualism_rate,
-                community_benefit
-            )
-            self.update_output(f"\nFinal best individual: {best_individual}")
-            self.update_output(f"Final best fitness: {best_fitness}")
-            self.start_button.config(state=tk.NORMAL)
-            self.visualizer.stop()
 
-        self.after(100, run_genetic_algorithm)
+    def run_genetic_algorithm():
+        best_individual, best_fitness = genetic_algorithm(
+            self.update_output,
+            self.visualizer.draw,
+            pop_size,
+            gene_length,
+            target,
+            max_generations,
+            mutation_rate,
+            elite_size,
+            predator_rate,
+            disaster_rate,
+            mutation_type,
+            num_species,
+            mutualism_rate,
+            community_benefit
+        )
+        self.update_output(f"\nFinal best individual: {best_individual}")
+        self.update_output(f"Final best fitness: {best_fitness}")
+        self.start_button.config(state=tk.NORMAL)
+        self.visualizer.stop()
 
+        self.after(100, run_genetic_algorithm)   
+        
+    
     def update_output(self, message):
         self.output_text.insert(tk.END, message + "\n")
         self.output_text.see(tk.END)
