@@ -459,12 +459,12 @@ woff = ["brotli (>=1.0.1)", "brotlicffi (>=0.8.0)", "zopfli (>=0.1.4)"]
 
 [[package]]
 name = "future"
-version = "0.16.0"
+version = "0.18.3"
 description = "Clean single-source support for Python 3 and 2"
 optional = false
-python-versions = "*"
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
 files = [
-    {file = "future-0.16.0.tar.gz", hash = "sha256:e39ced1ab767b5936646cedba8bcce582398233d6a627067d4c6a454c90cfedb"},
+    {file = "future-0.18.3.tar.gz", hash = "sha256:34a17436ed1e96697a86f9de3d15a3b0be01d8bc8de9c1dffd59fb8234ed5307"},
 ]
 
 [[package]]
@@ -1858,4 +1858,4 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "fab26c4fabfc3feed6d13b7e0cb89fc2183e93a6d5ed8f0e2ed6b0cdf4b917ac"
+content-hash = "7148d89c8caad24d4bc8248a8fa6a7a76814913e8a65ccfc3b405e6f3a6ab9c4"
