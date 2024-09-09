@@ -71,7 +71,7 @@ sympy = "1.12.1"
 trio = "0.25.0"
 trio-websocket = "0.11.1"
 typing_extensions = "4.11.0"
-urllib3 = "1.26.18"
+urllib3 = "1.26.19"
 wrapt = "1.16.0"
 wsproto = "1.2.0"
 
